@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>NOVEDADES TMP-IN vs TEMPER</title>
+<style>
+  body { font-family: Arial, sans-serif; padding: 20px; }
+  button { padding: 10px 16px; margin-bottom: 12px; font-size: 15px; cursor: pointer; }
+  #loading { display: none; font-weight: bold; margin-bottom: 12px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; margin-bottom: 30px; }
+
+  /* Aquí ya forzamos el centrado */
+  th, td { 
+    border: 1px solid #ddd; 
+    padding: 6px 8px; 
+    text-align: center !important; 
+    vertical-align: middle !important; 
+  }
+
+  th { background: #f5f5f5; position: sticky; top: 0; z-index: 2; }
+  input { padding: 6px; margin-right: 8px; }
+  .muted { color: #666; font-size: 12px; }
+
+  /* Fila de filtros */
+  thead .filter-row th { background: #fff; position: sticky; top: 36px; z-index: 3; }
+  thead .filter-row select { width: 100%; }
+
+  /* Ajustes visuales Select2 en encabezado */
+  .select2-container .select2-selection--multiple {
+    min-height: 28px;
+    padding: 2px 4px;
+    border-radius: 4px;
+  }
+  .select2-container { width: 100% !important; }
+</style>
+
+<!-- Librerías necesarias -->
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.4/css/jquery.dataTables.min.css"/>
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.3.6/css/buttons.dataTables.min.css"/>
+<script src="https://cdn.datatables.net/1.13.4/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/dataTables.buttons.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.3.6/js/buttons.print.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<!-- Select2 para select múltiple con buscador -->
+<link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+</head>
+<body>
+<a href="Por_temple_y_Novedades.html">Volver al Por Temple</a>
+<h2>NOVEDADES TMP-IN vs TEMPER</h2>
+<p class="muted">Calcula pendientes por soitem y usa la <strong>última fecha </strong> de TMP-IN para HorasTrans.</p>
+
+<!-- Ocultamos la fecha inicial -->
+<label style="display:none;">Fecha Inicial (cálculo): 
+  <input type="date" id="fechaInicial" value="2025-01-01">
+</label> 
+
+<label>Fecha Final: 
+  <input type="date" id="fechaFinal">
+</label><br><br>
+<button id="btnCargar">Cargar Pendientes </button>
+<div id="loading">Cargando datos, por favor espera...</div>
+
+<h3>POR RECIBIR SORTING</h3>
+<table id="tablaPendientesTemper" class="display nowrap" style="width:100%">
+  <thead>
+    <tr>
+      <th>Soitem</th>
+      <th>Pzs TMP-IN</th>
+      <th>Pzs TEMPER</th>
+      <th>Diferncia</th>
+      <th>Maquina</th>
+      <th>Part</th>
+      <th>Acabado</th>
+      <th>Turno</th>
+      <th>Fecha</th>
+      <th>Horas</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<h3>RECIBIDO MAYOR AL TEMPLADO</h3>
+<table id="tablaTemperMayor" class="display nowrap" style="width:100%">
+  <thead>
+    <tr>
+      <th>Soitem</th>
+      <th>Pzs TMP-IN</th>
+      <th>Pzs TEMPER</th>
+      <th>Diferencia</th>
+      <th>Maquina</th>
+      <th>Part</th>
+      <th>Acabado</th>
+      <th>Turno</th>
+      <th>Fecha</th>
+      <th>Horas</th>
+    </tr>
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+if (!sessionStorage.getItem("usuario")) {
+    window.location.href = "login.html";
+  }
+
+// ================= CONFIGURACIÓN DE FILTROS =================
+const columnasConFiltro = [0, 4, 5];  
+// ejemplo: Clave (0), Cliente (6), Descripción (7)
+// Si quieres todas, pon [0,1,2,3,4,5,6,7,8,9,10]
+// Si quieres ninguna, deja []
+
+// ---- resto de utilidades (igual que tu código) ----
+function formatearFechaLocalColombia(dateObj) {
+  return new Date(dateObj).toLocaleString("es-CO", { hour12: true });
+}
+function mostrarCargando(mostrar) {
+  document.getElementById("loading").style.display = mostrar ? "block" : "none";
+}
+function ahoraColombia() {
+  return new Date(new Date().toLocaleString("en-US", { timeZone: "America/Bogota" }));
+}
+function calcularDt3(dtStr, dt2Str, shiftValue) {
+  const dt = new Date(dtStr);
+  const dt2 = new Date(dt2Str);
+  const dt2Col = new Date(dt2.toLocaleString("en-US", { timeZone: "America/Bogota" }));
+  const h = dt2Col.getHours(), m = dt2Col.getMinutes(), s = dt2Col.getSeconds();
+  const y = dt.getUTCFullYear();
+  const mo = dt.getUTCMonth();
+  const d = dt.getUTCDate();
+  let dt3 = new Date(y, mo, d, h, m, s);
+  const turno = Number(shiftValue);
+  if (turno === 2 && h >= 0 && h < 12) {
+    dt3.setDate(dt3.getDate() + 1);
+  }
+  return dt3;
+}
+
+// ---- API ----
+async function consultarDepartamento(fechaInicio, fechaFin, departamento) {
+  const apiUrl = "https://optima.tecnoglass.net/api/alutions_production/reports-producion/Detalle-produccion";
+  const payload = {
+    Fecha_inicial: fechaInicio,
+    Fecha_final: fechaFin || new Date().toISOString().slice(0,10),
+    Departamento: departamento
+  };
+  const res = await fetch(apiUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload)
+  });
+  if (!res.ok) throw new Error("Error HTTP " + res.status);
+  const json = await res.json();
+  const detalles = [];
+  if (Array.isArray(json?.data)) {
+    json.data.forEach(item => {
+      if (Array.isArray(item?.DetalleProduccion)) {
+        detalles.push(...item.DetalleProduccion);
+      }
+    });
+  }
+  return detalles;
+}
+
+// ---- Principal ----
+async function cargarPendientesTemper() {
+  mostrarCargando(true);
+  try {
+    const fi = document.getElementById("fechaInicial").value || "2025-01-01";
+    const ff = document.getElementById("fechaFinal").value || new Date().toISOString().slice(0,10);
+
+    const [tmpinData, temperData] = await Promise.all([
+      consultarDepartamento(fi, ff, "TMP-IN"),
+      consultarDepartamento(fi, ff, "TEMPER")
+    ]);
+
+    const temperMap = {};
+    for (const t of temperData) {
+      const clave = `${t.sonum}-${t.soitemnum}`;
+      const prod = Number(t.PcProd) || 0;
+      const scr = Number(t.PcScr) || 0;
+      temperMap[clave] = (temperMap[clave] || 0) + prod + scr;
+    }
+
+    const tmpinMap = {};
+    const ahora = ahoraColombia();
+    for (const t of tmpinData) {
+      const clave = `${t.sonum}-${t.soitemnum}`;
+      const piezas = Number(t.PcProd) || 0;
+      const dt3 = calcularDt3(t.dt, t.dt2, t.shift);
+      const horasTrans = (ahora - dt3) / (1000 * 60 * 60);
+
+      if (!tmpinMap[clave]) {
+        tmpinMap[clave] = {
+          tmpin: 0,
+          Machine: t.MachineName?.trim() || "-",
+          Part: t.Part || "-",
+          Cliente: (t.cliente || "-").toString().trim(),
+          Descripcion: t.descrip || "-",
+          Turno: (t.shift ?? "").toString(),
+          dt3Raw: dt3,
+          HorasTrans: horasTrans
+        };
+      }
+
+      tmpinMap[clave].tmpin += piezas;
+
+      if (dt3 > tmpinMap[clave].dt3Raw) {
+        tmpinMap[clave].Machine = t.MachineName?.trim() || "-";
+        tmpinMap[clave].Part = t.Part || "-";
+        tmpinMap[clave].Cliente = (t.cliente || "-").toString().trim();
+        tmpinMap[clave].Descripcion = t.descrip || "-";
+        tmpinMap[clave].Turno = (t.shift ?? "").toString();
+        tmpinMap[clave].dt3Raw = dt3;
+        tmpinMap[clave].HorasTrans = (ahora - dt3) / (1000 * 60 * 60);
+      }
+    }
+
+    const fechaMinMostrar = new Date("2025-04-10T00:00:00");
+    const mayoresTMP = [];
+    const mayoresTemper = [];
+
+    for (const clave in tmpinMap) {
+      const totalTMP = tmpinMap[clave].tmpin || 0;
+      const totalTemper = temperMap[clave] || 0;
+      const pendiente = totalTMP - totalTemper;
+      if (tmpinMap[clave].dt3Raw < fechaMinMostrar) continue;
+      if (tmpinMap[clave].HorasTrans < 15) continue;
+
+      if (pendiente > 0) {
+        mayoresTMP.push({
+          soitem: clave, tmpin: totalTMP, temper: totalTemper, pendiente,
+          ...tmpinMap[clave], FechaDT3: formatearFechaLocalColombia(tmpinMap[clave].dt3Raw),
+          HorasTrans: tmpinMap[clave].HorasTrans.toFixed(1)
+        });
+      } else if (pendiente < 0) {
+        mayoresTemper.push({
+          soitem: clave, tmpin: totalTMP, temper: totalTemper, diferencia: Math.abs(pendiente),
+          ...tmpinMap[clave], FechaDT3: formatearFechaLocalColombia(tmpinMap[clave].dt3Raw),
+          HorasTrans: tmpinMap[clave].HorasTrans.toFixed(1)
+        });
+      }
+    }
+
+    renderizarTabla("#tablaPendientesTemper", mayoresTMP, "pendiente");
+    renderizarTabla("#tablaTemperMayor", mayoresTemper, "diferencia");
+
+  } catch (e) {
+    console.error(e);
+    alert("Error al cargar datos: " + e.message);
+  } finally {
+    mostrarCargando(false);
+  }
+}
+
+function renderizarTabla(selector, data, campoDif) {
+  const table = $(selector).DataTable();
+  table.clear();
+  if (!data.length) {
+    table.rows.add([]).draw();
+    return;
+  }
+  const rows = data.map(r => [
+    r.soitem, r.tmpin, r.temper, r[campoDif], r.Machine,
+    r.Part, r.Descripcion, r.Turno,
+    r.FechaDT3, r.HorasTrans
+  ]);
+  table.rows.add(rows).draw();
+}
+
+/* ====== Filtros por columna (multi-select con buscador) ====== */
+function ensureFilterRow(api) {
+  const $thead = $(api.table().header());
+  if ($thead.find('tr.filter-row').length) return; // ya existe
+  const $filterRow = $('<tr class="filter-row"></tr>');
+  $thead.find('tr:eq(0) th').each(function(i){ 
+    $filterRow.append('<th data-col="'+i+'"></th>'); 
+  });
+  $thead.append($filterRow);
+}
+
+function populateOrRefreshColumnFilters(api) {
+  const $thead = $(api.table().header());
+  api.columns().every(function (colIdx) {
+    const column = this;
+    const $cell = $thead.find('tr.filter-row th').eq(colIdx);
+
+    if (!columnasConFiltro.includes(colIdx)) {
+      $cell.empty(); // no filtro
+      return;
+    }
+
+    // Crear select si no existe
+    let $select = $cell.find('select.col-filter');
+    if (!$select.length) {
+      $select = $('<select class="col-filter" multiple></select>').appendTo($cell.empty());
+      $select.select2({
+        placeholder: 'Filtrar...',
+        allowClear: true,
+        closeOnSelect: false,
+        width: '100%'
+      }).on('change', function(){
+        const vals = $(this).val();
+        if (vals && vals.length) {
+          const regex = vals.map(v => '^' + $.fn.dataTable.util.escapeRegex(v) + '$').join('|');
+          column.search(regex, true, false).draw();
+        } else {
+          column.search('', true, false).draw();
+        }
+      });
+    }
+
+    const selected = $select.val() ? [...$select.val()] : [];
+    const values = new Set();
+    column.data().each(function (d) {
+      const text = $('<div>').html(d).text().trim();
+      values.add(text);
+    });
+
+    const existing = new Set();
+    $select.find('option').each(function(){ existing.add($(this).val()); });
+
+    [...values].sort((a,b)=>{
+      const na = parseFloat(a), nb = parseFloat(b);
+      if (!isNaN(na) && !isNaN(nb)) return na - nb;
+      return (''+a).localeCompare((''+b), 'es');
+    }).forEach(v=>{
+      if (v !== '' && !existing.has(v)) $select.append(new Option(v, v, false, selected.includes(v)));
+    });
+
+    $select.find('option').each(function(){
+      const val = $(this).val();
+      if (val && !values.has(val)) $(this).remove();
+    });
+
+    $select.val(selected).trigger('change.select2');
+  });
+}
+
+$(document).ready(function () {
+  const tables = $("#tablaPendientesTemper, #tablaTemperMayor").DataTable({
+    dom: "Bfrtip",
+    buttons: ["excelHtml5", "pdfHtml5", "print"],
+    scrollX: true,
+    pageLength: 25,
+    orderCellsTop: true,
+    language: {
+      url: "https://cdn.datatables.net/plug-ins/1.13.4/i18n/es-ES.json"
+    },
+    initComplete: function(){
+      const api = this.api();
+      ensureFilterRow(api);
+      populateOrRefreshColumnFilters(api);
+      api.on('draw', function(){
+        populateOrRefreshColumnFilters(api);
+      });
+    }
+  });
+});
+
+document.getElementById("btnCargar").addEventListener("click", cargarPendientesTemper);
+</script>
+
+</body>
+</html>

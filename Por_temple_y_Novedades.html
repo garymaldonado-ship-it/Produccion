@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Reporte Pendientes Extrusión</title>
+
+<!-- jQuery + DataTables + Buttons (Excel/PDF/Print) -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css">
+<link rel="stylesheet" href="https://cdn.datatables.net/buttons/2.4.2/css/buttons.dataTables.min.css">
+<script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/dataTables.buttons.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/pdfmake.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdfmake/0.2.7/vfs_fonts.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.html5.min.js"></script>
+<script src="https://cdn.datatables.net/buttons/2.4.2/js/buttons.print.min.js"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" rel="stylesheet" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+
+<style>
+  :root{
+    --header-bg:#f5f5f5;
+    --border:#ddd;
+  }
+
+/* Aquí ya forzamos el centrado */
+  th, td { 
+    border: 1px solid #ddd; 
+    padding: 6px 8px; 
+    text-align: center !important; 
+    vertical-align: middle !important; 
+  }
+
+  body { font-family: Arial, sans-serif; padding: 20px; }
+  h1 { margin-bottom: 14px; }
+  h2 { margin: 24px 0 8px; }
+  #cargando { display:none; margin:10px 0; }
+
+  /* Resumen pequeño */
+  #tablaResumenPendientes table{
+    border-collapse: collapse;
+    font-size: 14px;
+    width: 40%;
+    min-width: 480px;
+  }
+  #tablaResumenPendientes th, #tablaResumenPendientes td{
+    border:1px solid var(--border);
+    padding:6px;
+    text-align:center;
+  }
+  #tablaResumenPendientes th{ background:var(--header-bg); }
+
+  /* DataTables ajustes */
+  .dt-container .dt-buttons{
+    margin:6px 0;
+  }
+  table.dataTable thead th{
+    background: var(--header-bg);
+  }
+  /* Fila de filtros */
+  thead tr.filtros th{
+    padding: 4px 6px !important;
+  }
+  thead tr.filtros input{
+    width: 100%;
+    box-sizing: border-box;
+    padding: 4px 6px;
+    font-size: 12px;
+  }
+
+/* Ajuste visual para que select2 no se expanda antes de cargar */
+thead tr.filtros select {
+  width: 100%;
+  font-size: 12px;
+  padding: 4px 6px;
+  height: 24px; /* mismo alto que input */
+  box-sizing: border-box;
+}
+
+/* Forzar que select2 use mismo alto y estilo que input */
+thead tr.filtros .select2-container .select2-selection--multiple {
+  min-height: 24px !important;
+  height: 24px !important;
+  padding: 2px 4px !important;
+  box-sizing: border-box;
+  display: flex;
+  align-items: center;
+}
+
+  /* Scroll visual */
+  div.dataTables_scrollBody{
+    border:1px solid var(--border);
+    border-top:0;
+  }
+ button { padding: 10px 16px; margin-bottom: 12px; font-size: 15px; cursor: pointer; }
+ #loading { display: none; font-weight: bold; margin-bottom: 12px; }
+</style>
+</head>
+<body>
+<a href="Novedades_Tmpin_VS_Temper.html">Por Entregar a Sorting</a>
+
+
+<h1>GESTION EN TEMPLE</h1>
+<button id="btnCargar">Cargar pendientes</button>
+<div id="loading">Cargando datos, por favor espera...</div>
+
+<!-- Resumen -->
+<div id="tablaResumenPendientes"></div>
+
+
+<!-- PENDIENTES -->
+<h2>PENDIENTES</h2>
+<table id="tablaPendientes" class="display" style="width:100%">
+  <thead>
+    <tr>
+      <th>Soitem</th><th>Part</th><th>Descripción</th><th>Prio</th><th>Pzs Pend</th>
+      <th>Kg Pend</th><th>Long</th><th>Máquina</th><th>Línea</th><th>Temper</th>
+      <th>Fecha</th><th>Aleación</th><th>Planta</th><th>Cliente</th>
+    </tr>
+    <tr class="filtros">
+ <th><select multiple></select></th> <!-- Soitem (0) -->
+ <th><select multiple></select></th> <!-- Part (1) -->
+  <th><select multiple></select></th> <!-- Descripción (2) -->
+  <th><select multiple></select></th> <!-- Prio (3) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Pzs Pend (4) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Kg Pend (5) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Long (6) -->
+ <th><select multiple></select></th> <!-- Máquina (7) -->
+  <th><select multiple></select></th>        <!-- Línea (8) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Temper (9) -->
+  <th><select multiple></select></th> <!-- Fecha (10) -->
+ <th><select multiple></select></th> <!-- Aleación (11) -->
+  <th><select multiple></select></th>        <!-- Planta (12) -->
+  <th><select multiple></select></th>        <!-- Cliente (13) -->
+</tr>
+  </thead>
+  <tbody></tbody>
+<tfoot>
+  <tr>
+    <th colspan="5" style="text-align:right">TOTAL Kg Pend:</th>
+    <th id="totalKgPend">0</th>
+    <th colspan="8"></th>
+  </tr>
+</tfoot>
+
+</table>
+
+<!-- NOVEDADES -->
+<h2>NOVEDADES</h2>
+<table id="tablaNovedades" class="display" style="width:100%">
+  <thead>
+    <tr>
+      <th>Soitem</th><th>Part</th><th>Descripción</th><th>Prio</th><th>Pzs TMP-IN</th>
+      <th>Kg TMP-IN</th><th>Pzs EXTRUDE</th><th>Kg EXTRUDE</th><th>Dif Pzs</th><th>Dif Kg</th>
+      <th>Máquina</th><th>Fecha</th><th>Línea</th><th>Planta</th><th>Cliente</th>
+    </tr>
+    <tr class="filtros">
+  <th><input placeholder="Filtrar..."></th> <!-- Soitem (0) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Part (1) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Descripción (2) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Prio (3) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Pzs TMP-IN (4) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Kg TMP-IN (5) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Pzs EXTRUDE (6) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Kg EXTRUDE (7) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Dif Pzs (8) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Dif Kg (9) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Máquina (10) -->
+  <th><input placeholder="Filtrar..."></th> <!-- Fecha (11) -->
+  <th><select multiple></select></th>       <!-- Línea (12) -->
+  <th><select multiple></select></th>       <!-- Planta (13) -->
+  <th><select multiple></select></th>       <!-- Cliente (14) -->
+</tr>
+
+  </thead>
+  <tbody></tbody>
+</table>
+
+<script>
+if (!sessionStorage.getItem("usuario")) {
+    window.location.href = "login.html";
+  }
+
+// =================== Variables globales ===================
+let datosPendientes = [];
+let datosNovedades = [];
+let lineasMap = {};
+
+
+const cargando = document.getElementById("cargando");
+const resumenDiv = document.getElementById("tablaResumenPendientes");
+
+let dtPendientes = null;
+let dtNovedades  = null;
+
+// =================== Utilidades ===================
+function mostrarCargando(mostrar) {
+  document.getElementById("loading").style.display = mostrar ? "block" : "none";
+}
+
+// dd/mm/yyyy
+function formatearFecha(fechaISO) {
+  if (!fechaISO) return "";
+  const d = new Date(fechaISO);
+  if (isNaN(d.getTime())) return "";
+  const dia = String(d.getDate()).padStart(2,'0');
+  const mes = String(d.getMonth()+1).padStart(2,'0');
+  const anio = d.getFullYear();
+  return `${dia}/${mes}/${anio}`;
+}
+
+// =================== Fuentes externas ===================
+async function cargarLineas() {
+  const url = "https://api.allorigins.win/raw?url=" + encodeURIComponent("https://docs.google.com/spreadsheets/d/e/2PACX-1vRS6VAInZZmrWB1tVnoBZQQnMWuBkfKT3EKCnfDdTkObIQDAZfFFZnk6ga4afkfA-tvEady3I5ZXE07/pub?output=csv");
+  const resp = await fetch(url);
+  const csvText = await resp.text();
+
+  const rows = csvText.split(/\r?\n/).map(r => r.split(","));
+  const headers = rows.shift().map(h => h.trim().toUpperCase());
+
+  const claveIndex = headers.findIndex(h => h === "SOITEM");
+  const lineaIndex = headers.findIndex(h => h === "LINEA");
+  lineasMap = {};
+  rows.forEach(row => {
+    const clave = (row[claveIndex]||"").trim();
+    const linea = (row[lineaIndex]||"").trim() || "-";
+    if (clave) lineasMap[clave] = linea;
+  });
+}
+
+function getPlanta(ultimaMachine) {
+  const m = (ultimaMachine || "").trim().toUpperCase();
+  if (["PRENSA 7-1","PRENSA 7-2","PRENSA 7-3","PRENSA 7-6","PRENSA 7-7","PRENSA 7-8"].includes(m)) return "A1";
+  if (["PRENSA 7-4"].includes(m)) return "A2";
+  if (["PRENSA 7-5","PRENSA 7-9","PRENSA 7-10"].includes(m)) return "A3";
+  return "OTRA";
+}
+
+async function consultarDepartamento(fechaInicio, fechaFin, departamento) {
+  const payload = { Fecha_inicial: fechaInicio, Fecha_final: fechaFin, Departamento: departamento };
+  const resp = await fetch("https://optima.tecnoglass.net/api/alutions_production/reports-producion/Detalle-produccion", {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+  const json = await resp.json();
+  let detalle = [];
+  if (json?.data && Array.isArray(json.data)) {
+    json.data.forEach(d => {
+      if (Array.isArray(d.DetalleProduccion)) detalle = detalle.concat(d.DetalleProduccion);
+    });
+  }
+  return detalle;
+}
+
+async function obtenerAleacionTemper() {
+  const hoy = new Date();
+  const hace3dias = new Date(hoy);
+  hace3dias.setDate(hoy.getDate()-3);
+
+  const desde = hace3dias.toISOString().slice(0,10);
+  const hasta = hoy.toISOString().slice(0,10);
+  const payload = { Fecha_inicial: desde, Fecha_final: hasta, Departamento: null };
+
+  const resp = await fetch("https://optima.tecnoglass.net/api/alutions_production/reporte-extruccion", {
+    method: "POST",
+    headers: { "Content-Type":"application/json" },
+    body: JSON.stringify(payload)
+  });
+  const json = await resp.json();
+
+  let prensa=[], sierra=[];
+  if (json?.data && Array.isArray(json.data)) {
+    json.data.forEach(item=>{
+      if(Array.isArray(item.Prensa)) prensa=prensa.concat(item.Prensa);
+      if(Array.isArray(item.Sierra)) sierra=sierra.concat(item.Sierra);
+    });
+  }
+  const mapa={};
+  prensa.forEach(r=>{
+    const clave=`${r.so}-${r.Soitem}`;
+    mapa[clave]=mapa[clave]||{};
+    mapa[clave].aleacion = r.Aleacion || "";
+  });
+  sierra.forEach(r=>{
+    const clave=`${r.sonum}-${r.soitemnum}`;
+    mapa[clave]=mapa[clave]||{};
+    mapa[clave].temper = r.temper || "";
+  });
+  return mapa;
+}
+
+// =================== Resumen ===================
+function generarTablaResumenPendientes(pendientes) {
+  if (pendientes.length === 0) {
+    resumenDiv.innerHTML = "";
+    return;
+  }
+
+  const resumen = {};
+  pendientes.forEach(p => {
+    const fecha = p.ultimaFecha;
+    const planta = p.planta;
+    if (!resumen[fecha]) resumen[fecha] = { A1: 0, A2: 0, A3: 0 };
+    if (["A1","A2","A3"].includes(planta)) resumen[fecha][planta] += p.kgPend;
+  });
+
+  let totalA1 = 0, totalA2 = 0, totalA3 = 0, totalGeneral = 0;
+  let html = `
+    <h2>Resumen Kg Pendientes por Fecha y Planta</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Fecha</th><th>A1</th><th>A2</th><th>A3</th><th>Total</th>
+        </tr>
+      </thead>
+      <tbody>
+  `;
+
+  Object.entries(resumen).forEach(([fecha, plantas]) => {
+    const totalDia = (plantas.A1||0)+(plantas.A2||0)+(plantas.A3||0);
+    totalA1 += plantas.A1||0;
+    totalA2 += plantas.A2||0;
+    totalA3 += plantas.A3||0;
+    totalGeneral += totalDia;
+
+    html += `
+      <tr>
+        <td>${fecha}</td>
+        <td>${(plantas.A1||0).toFixed(0)}</td>
+        <td>${(plantas.A2||0).toFixed(0)}</td>
+        <td>${(plantas.A3||0).toFixed(0)}</td>
+        <td>${totalDia.toFixed(0)}</td>
+      </tr>
+    `;
+  });
+
+  html += `
+      <tr>
+        <td><b>Total</b></td>
+        <td><b>${totalA1.toFixed(0)}</b></td>
+        <td><b>${totalA2.toFixed(0)}</b></td>
+        <td><b>${totalA3.toFixed(0)}</b></td>
+        <td><b>${totalGeneral.toFixed(0)}</b></td>
+      </tr>
+    </tbody>
+    </table>
+  `;
+
+  resumenDiv.innerHTML = html;
+}
+
+// =================== DataTables (inicial vacías) ===================
+function initDataTables(){
+  // helper de idioma
+  const langES = {
+    "decimal": ",",
+    "thousands": ".",
+    "processing": "Procesando...",
+    "search": "Buscar:",
+    "lengthMenu": "Mostrar _MENU_ registros",
+    "info": "Mostrando _START_ a _END_ de _TOTAL_ registros",
+    "infoEmpty": "Mostrando 0 a 0 de 0 registros",
+    "infoFiltered": "(filtrado de _MAX_ registros)",
+    "loadingRecords": "Cargando...",
+    "zeroRecords": "Ningún dato disponible en esta tabla",
+    "emptyTable": "Ningún dato disponible en esta tabla",
+    "paginate": { "first":"Primero","previous":"Anterior","next":"Siguiente","last":"Último" }
+  };
+
+  // PENDIENTES
+dtPendientes = new DataTable('#tablaPendientes', {
+  data: [], // vacía al inicio
+  orderCellsTop: true,
+  fixedHeader: false,
+  scrollX: true,
+  scrollCollapse: true,
+  pageLength: 25,
+  language: langES,
+  dom: '<"top"Bf>rt<"bottom"lip><"clear">',
+  buttons: [
+    { extend:'excelHtml5', title:'Pendientes', customize: function (xlsx) {
+      var sheet = xlsx.xl.worksheets['sheet1.xml'];
+      // Selecciona todas las celdas y aplica alineación centrada
+      $('row c', sheet).attr('s', '51'); // 51 es el estilo de centrado predeterminado
+    }
+ },
+    { extend:'pdf', title:'Pendientes', orientation:'landscape', pageSize:'A4', customize: function (doc) {
+        // Centrar todas las celdas
+        doc.styles.tableBodyEven.alignment = 'center';
+        doc.styles.tableBodyOdd.alignment = 'center';
+        doc.styles.tableHeader.alignment = 'center';
+      }
+ },
+    { extend:'print', title:'Pendientes' }
+  ],
+  columns: [
+    { data:'clave' },
+    { data:'Part' },
+    { data:'descrip' },
+    { data:'prio' },
+    { data:'piezasPend' },
+    { data:'kgPend', render:(v)=> (v??0).toFixed(0) },
+    { data:'long' },
+    { data:'ultimaMachine' },
+    { data:'linea' },
+    { data:'temper' },
+    { data:'ultimaFecha' },
+    { data:'aleacion' },
+    { data:'planta' },
+    { data:'cliente' }
+  ],
+  footerCallback: function (row, data, start, end, display) {
+      var api = this.api();
+      var total = api
+          .column(5, { search: 'applied' }) // Columna "kgPend" (índice 5)
+          .data()
+          .reduce(function (a, b) {
+              return (parseFloat(a) || 0) + (parseFloat(b) || 0);
+          }, 0);
+      $(api.column(5).footer()).html(total.toLocaleString());
+  }
+});
+
+
+  // NOVEDADES
+  dtNovedades = new DataTable('#tablaNovedades', {
+    data: [],
+    orderCellsTop: true,
+    fixedHeader: false,
+    scrollX: true,
+    scrollY: 400,
+    scrollCollapse: true,
+    pageLength: 25,
+    language: langES,
+    dom: '<"top"Bf>rt<"bottom"lip><"clear">',
+    buttons: [
+      { extend:'excelHtml5', title:'Novedades' },
+      { extend:'pdf', title:'Novedades', orientation:'landscape', pageSize:'A4' },
+      { extend:'print', title:'Novedades' }
+    ],
+    columns: [
+      { data:'clave' },
+      { data:'Part' },
+      { data:'descrip' },
+      { data:'prio' },
+      { data:'piezasTmp' },
+      { data:'kgTmp', render:(v)=> (v??0).toFixed(0) },
+      { data:'piezasExtrude' },
+      { data:'kgExtrude', render:(v)=> (v??0).toFixed(0) },
+      { data:'diffPiezas' },
+      { data:'diffKg', render:(v)=> (v??0).toFixed(2) },
+      { data:'ultimaMachine' },
+      { data:'ultimaFecha' },
+      { data:'linea' },
+      { data:'planta' },
+      { data:'cliente' }
+    ]
+  });
+
+
+
+  // Activar filtros por columna (para ambas tablas)
+ [dtPendientes, dtNovedades].forEach(dt => {
+  const $header = $(dt.table().header()); // header específico de esta tabla
+  dt.columns().every(function (idx) {
+    const col = this;
+    const $th = $('tr.filtros th', $header).eq(idx);
+    const $input = $th.find('input');
+    const $multi = $th.find('select[multiple]');
+
+if ($input.length) {
+      $input.off('.dtFilter').on('keyup.dtFilter change.dtFilter', function () {
+        if (col.search() !== this.value) col.search(this.value).draw();
+  });
+}
+
+if ($multi.length) {
+      $multi.off('.dtFilter').on('change.dtFilter', function () {
+        const vals = $(this).val() || [];
+        const regex = vals.length
+          ? '^(?:' + vals.map(v => $.fn.dataTable.util.escapeRegex(String(v))).join('|') + ')$'
+          : '';
+        col.search(regex, true, false).draw(); // regex=true, smart=false
+  });
+}
+
+    });
+  });
+}
+
+
+
+
+// =================== Carga principal ===================
+async function cargarPendientes() {
+  mostrarCargando(true);
+  try{
+    await cargarLineas();
+
+    const fechaInicio = "2025-01-01";
+    const fechaFin = new Date().toISOString().slice(0,10);
+
+    const [extrude,tmpin,mapaAleacionTemper] = await Promise.all([
+      consultarDepartamento(fechaInicio,fechaFin,"EXTRUDE"),
+      consultarDepartamento(fechaInicio,fechaFin,"TMP-IN"),
+      obtenerAleacionTemper()
+    ]);
+
+    // Mapear EXTRUDE por soitem
+    const extrudeMap={};
+    extrude.forEach(e=>{
+      const clave=`${e.sonum}-${e.soitemnum}`;
+      if(!extrudeMap[clave]){
+        extrudeMap[clave]={
+          piezasExtrude:0, kgExtrude:0,
+          ultimaFecha:null, ultimaMachine:"-",
+          Part:e.Part||"-", descrip:e.descrip||"-", long:e.long||"-",
+          cliente:e.cliente||"-", prio:e.prio||"-"
+        };
+      }
+      const pc = e.PcProd || 0;
+      const kg = e.KgProd || 0;
+      extrudeMap[clave].piezasExtrude += pc;
+      extrudeMap[clave].kgExtrude += kg;
+
+      if (pc > 0) {
+        if (!extrudeMap[clave].ultimaFecha || new Date(e.dt) > new Date(extrudeMap[clave].ultimaFecha)) {
+          extrudeMap[clave].ultimaFecha = e.dt;
+        }
+        extrudeMap[clave].ultimaMachine = (e.MachineName || "-").trim();
+        extrudeMap[clave].Part = e.Part || "-";
+        extrudeMap[clave].descrip = e.descrip || "-";
+        extrudeMap[clave].long = e.long || "-";
+        extrudeMap[clave].cliente = e.cliente || "-";
+        extrudeMap[clave].prio = e.prio || "-";
+      }
+    });
+
+    // Mapear TMP-IN
+    const tmpMap={};
+    tmpin.forEach(i=>{
+      const clave=`${i.sonum}-${i.soitemnum}`;
+      if(!tmpMap[clave]) tmpMap[clave]={piezas:0,kg:0};
+      tmpMap[clave].piezas+=i.PcProd||0;
+      tmpMap[clave].kg+=i.KgProd||0;
+    });
+
+    const pendientes=[], novedades=[];
+    const limiteNovedades = new Date("2025-04-01");
+
+    Object.entries(extrudeMap).forEach(([clave,e])=>{
+      const piezasTmp=tmpMap[clave]?.piezas||0;
+      const kgTmp=tmpMap[clave]?.kg||0;
+
+      const piezasPend=e.piezasExtrude-piezasTmp;
+      const kgPend=e.kgExtrude-kgTmp;
+
+      const planta=getPlanta(e.ultimaMachine);
+      const linea=lineasMap[clave]||"-";
+
+      if(piezasPend>0){
+        pendientes.push({
+          clave,
+          aleacion: ( (mapaAleacionTemper[clave]||{}).aleacion ) || "",
+          temper: ( (mapaAleacionTemper[clave]||{}).temper ) || "",
+          piezasPend,
+          kgPend,
+          ultimaMachine: e.ultimaMachine,
+          ultimaFecha: formatearFecha(e.ultimaFecha),
+          planta,
+          Part: e.Part,
+          linea,
+          descrip: e.descrip,
+          long: e.long,
+          cliente: e.cliente,
+          prio: e.prio
+        });
+      } else if(piezasTmp>e.piezasExtrude && new Date(e.ultimaFecha)>=limiteNovedades){
+        novedades.push({
+          clave,
+          aleacion: ( (mapaAleacionTemper[clave]||{}).aleacion ) || "",
+          temper: ( (mapaAleacionTemper[clave]||{}).temper ) || "",
+          piezasTmp,
+          kgTmp,
+          piezasExtrude: e.piezasExtrude,
+          kgExtrude: e.kgExtrude,
+          diffPiezas: piezasTmp-e.piezasExtrude,
+          diffKg: kgTmp-e.kgExtrude,
+          ultimaMachine: e.ultimaMachine,
+          ultimaFecha: formatearFecha(e.ultimaFecha),
+          planta,
+          Part: e.Part,
+          linea,
+          descrip: e.descrip,
+          long: e.long,
+          cliente: e.cliente,
+          prio: e.prio
+        });
+      }
+    });
+
+    datosPendientes = pendientes;
+    datosNovedades = novedades;
+
+// Guardar en localStorage para mantener entre páginas
+localStorage.setItem('datosPendientes', JSON.stringify(datosPendientes));
+localStorage.setItem('datosNovedades', JSON.stringify(datosNovedades));
+
+
+    // Volcar datos en DataTables (sin recrear)
+    dtPendientes.clear().rows.add(datosPendientes).draw();
+    dtNovedades.clear().rows.add(datosNovedades).draw();
+
+   // Llenar multi-select dinámicos (separado por tabla)
+function llenarFiltrosTabla(dt) {
+  const $header = $(dt.table().header());
+  dt.columns().every(function (idx) {
+    const select = $('tr.filtros th', $header).eq(idx).find('select[multiple]');
+    if (select.length) {
+      select.empty();
+      const uniqueValues = [];
+      this.data().unique().sort().each(function (d) {
+        if (d && !uniqueValues.includes(d)) {
+          uniqueValues.push(d);
+          select.append('<option value="' + d + '">' + d + '</option>');
+        }
+      });
+      select.select2({ placeholder: "Filtrar...", allowClear: true, width: '100%' });
+    }
+  });
+}
+
+// Llenar filtros para cada tabla individualmente
+llenarFiltrosTabla(dtPendientes);
+llenarFiltrosTabla(dtNovedades);
+
+
+
+    // Resumen
+    generarTablaResumenPendientes(datosPendientes);
+
+  } catch(err){
+    console.error(err);
+    alert("Error cargando pendientes.");
+  } finally{
+    mostrarCargando(false);
+  }
+}
+
+// =================== Eventos ===================
+document.getElementById("btnCargar").addEventListener("click", cargarPendientes);
+
+// Inicializar DataTables vacías al cargar la página
+initDataTables();
+
+
+</script>
+
+</body>
+</html>
